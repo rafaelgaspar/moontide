@@ -2,7 +2,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Session } from './session.js';
 import { createMcpServer } from './mcp.js';
-import { createStarter } from './start.js';
+import { autostart, createStarter } from './start.js';
 import { parsePublicUrl } from './web-server.js';
 import { HistoryStore, resolveDataDir } from './history.js';
 import { RigStore } from './instruments.js';
@@ -33,7 +33,8 @@ async function main(): Promise<void> {
   const rig = new RigStore({ dataDir: () => resolveDataDir() });
   const session = new Session({ history, rig, build });
   // Nothing starts with the process: no web server, no port, no browser tab. The start tool starts
-  // Moontide, once. MOONTIDE_NO_BROWSER=1 makes that start open no tab (used by tests and probes).
+  // Moontide, once (MOONTIDE_AUTOSTART=1 makes that start happen with the process instead, see autostart).
+  // MOONTIDE_NO_BROWSER=1 makes that start open no tab (used by tests, probes and reverse-proxy setups).
   // MOONTIDE_HOST and MOONTIDE_PUBLIC_URL serve the page through a reverse proxy; both unset keeps it on loopback.
   const publicUrlValue = process.env.MOONTIDE_PUBLIC_URL?.trim();
   const starter = createStarter({
@@ -43,6 +44,7 @@ async function main(): Promise<void> {
     publicUrl: publicUrlValue ? parsePublicUrl(publicUrlValue) : undefined,
   });
   const mcpServer = createMcpServer({ session, starter });
+  void autostart(starter);
 
   // Registered before connecting the MCP transport, so any signal sent from then on goes through
   // the clean shutdown path. Before a start there is no web server to close.

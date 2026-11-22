@@ -284,3 +284,22 @@ export function createStarter(options: StarterOptions): Starter {
     },
   };
 }
+
+/**
+ * Starts Moontide with the process when MOONTIDE_AUTOSTART=1, for a server whose page is opened by hand
+ * (behind a reverse proxy, usually with MOONTIDE_NO_BROWSER=1) instead of by the start tool. A failed
+ * start is logged and left to the start tool, which retries it. Resolves false when autostart is off.
+ */
+export async function autostart(starter: Pick<Starter, 'start'>, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  if (env.MOONTIDE_AUTOSTART !== '1') {
+    return false;
+  }
+  try {
+    await starter.start();
+    return true;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[moontide] Autostart failed: ${reason}`);
+    return false;
+  }
+}
