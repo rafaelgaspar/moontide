@@ -1,0 +1,13 @@
+**
+# Fork GHCR image (repo-root Dockerfile): sources plus the files the package ships.
+!package.json
+!package-lock.json
+!tsconfig.json
+!src
+!src/**
+!page
+!page/**
+!reference
+!reference/**
+!instruments
+!instruments/**
