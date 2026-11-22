@@ -53,16 +53,43 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 /**
- * True only when the Host header names this server's own loopback address and the port it is bound to.
+ * True only when the Host header names this server's own loopback address and the port it is bound to,
+ * or the host of the public URL the page is served under (see parsePublicUrl).
  * A website that points its own name at 127.0.0.1 (DNS rebinding) sends its own name here, so it is refused.
  * The name is compared without regard to case; the port, a trailing dot or any other form must match exactly.
  */
-export function isAllowedHost(host: string | undefined, port: number): boolean {
+export function isAllowedHost(host: string | undefined, port: number, publicUrl?: URL): boolean {
   if (host === undefined) {
     return false;
   }
   const lowered = host.toLowerCase();
-  return lowered === `localhost:${port}` || lowered === `127.0.0.1:${port}` || lowered === `[::1]:${port}`;
+  return (
+    lowered === `localhost:${port}` ||
+    lowered === `127.0.0.1:${port}` ||
+    lowered === `[::1]:${port}` ||
+    (publicUrl !== undefined && lowered === publicUrl.host)
+  );
+}
+
+/**
+ * Parses the address the page is reached under when a reverse proxy serves it (MOONTIDE_PUBLIC_URL), for
+ * example https://moontide.example.org. Only an http or https origin is accepted: no path, query, fragment
+ * or credentials, because the page is always served from the root.
+ */
+export function parsePublicUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`the public URL ${JSON.stringify(value)} is not a valid URL`);
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`the public URL ${JSON.stringify(value)} must start with http:// or https://`);
+  }
+  if (url.pathname !== '/' || url.search !== '' || url.hash !== '' || url.username !== '' || url.password !== '') {
+    throw new Error(`the public URL ${JSON.stringify(value)} must be an origin only, like https://moontide.example.org`);
+  }
+  return url;
 }
 
 // One fixed line for every Host refusal: it never repeats the header, which a hostile page chooses.
@@ -100,8 +127,13 @@ export function startWebServer(options: {
   pageDir?: string;
   /** The folder name for the session label; defaults to the folder this process runs in. */
   folder?: string;
+  /** The address to listen on; defaults to HOST (loopback only). */
+  host?: string;
+  /** Where a reverse proxy serves the page: accepted as Host and Origin, and reported as the page URL. */
+  publicUrl?: URL;
 }): Promise<WebServer> {
-  const { session } = options;
+  const { session, publicUrl } = options;
+  const host = options.host ?? HOST;
   const pageDir = options.pageDir ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'page');
   const requestedPort = options.port ?? DEFAULT_PORT;
   let folder = options.folder ?? '';
@@ -126,7 +158,7 @@ export function startWebServer(options: {
     // same plain 403 as any other foreign name, instead of Node's own 400.
     const server = http.createServer({ requireHostHeader: false }, (req, res) => {
       // First of all, before the page and its token are read: boundPort changes after a port fallback.
-      if (!isAllowedHost(req.headers.host, boundPort)) {
+      if (!isAllowedHost(req.headers.host, boundPort, publicUrl)) {
         logThrottled('host', HOST_REFUSAL_LOG);
         refuseHost(res);
         return;
@@ -163,7 +195,7 @@ export function startWebServer(options: {
 
     server.on('upgrade', (req, socket, head) => {
       // Before the path, Origin and token rules: a page reached under another name gets nothing from them.
-      if (!isAllowedHost(req.headers.host, boundPort)) {
+      if (!isAllowedHost(req.headers.host, boundPort, publicUrl)) {
         logThrottled('host', HOST_REFUSAL_LOG);
         socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
         socket.destroy();
@@ -215,6 +247,9 @@ export function startWebServer(options: {
       }
       const origin = req.headers.origin;
       const allowedOrigins = [`http://localhost:${boundPort}`, `http://127.0.0.1:${boundPort}`];
+      if (publicUrl !== undefined) {
+        allowedOrigins.push(publicUrl.origin);
+      }
       if (url.pathname !== WS_PATH || !origin || !allowedOrigins.includes(origin)) {
         // A wrong path from an allowed origin stays silent; a wrong origin is always loud.
         if (!origin || !allowedOrigins.includes(origin)) {
@@ -270,7 +305,7 @@ export function startWebServer(options: {
       if (!usedFallback && isEaddrinuse(err)) {
         usedFallback = true;
         // Never inspect, signal or connect to whatever holds requestedPort — just move.
-        server.listen(0, HOST);
+        server.listen(0, host);
         return;
       }
       settled = true;
@@ -289,7 +324,7 @@ export function startWebServer(options: {
       label = sessionLabel(folder, boundPort);
       settled = true;
       resolve({
-        url: `http://localhost:${boundPort}`,
+        url: publicUrl?.origin ?? `http://localhost:${boundPort}`,
         port: boundPort,
         label,
         async close() {
@@ -307,7 +342,7 @@ export function startWebServer(options: {
       });
     });
 
-    server.listen(requestedPort, HOST);
+    server.listen(requestedPort, host);
   });
 }
 

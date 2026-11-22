@@ -75,6 +75,10 @@ export interface StarterOptions {
   pageDir?: string;
   /** The folder name for the session label; tests give a made-up one. Defaults to the process folder. */
   folder?: string;
+  /** The address the web server listens on (MOONTIDE_HOST). Defaults to loopback only. */
+  host?: string;
+  /** Where a reverse proxy serves the page (MOONTIDE_PUBLIC_URL); see startWebServer. */
+  publicUrl?: URL;
   /** How long waitForPage waits for the page of a tab it opened. Defaults to PAGE_WAIT_MS. */
   pageWaitMs?: number;
   /** The clock, for tests. Defaults to Date.now. */
@@ -181,6 +185,8 @@ export function createStarter(options: StarterOptions): Starter {
         port: options.port,
         pageDir: options.pageDir,
         folder: options.folder,
+        host: options.host,
+        publicUrl: options.publicUrl,
       });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);

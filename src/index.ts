@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { Session } from './session.js';
 import { createMcpServer } from './mcp.js';
 import { createStarter } from './start.js';
+import { parsePublicUrl } from './web-server.js';
 import { HistoryStore, resolveDataDir } from './history.js';
 import { RigStore } from './instruments.js';
 import { runImportMidnamCommand } from './import-midnam.js';
@@ -33,7 +34,14 @@ async function main(): Promise<void> {
   const session = new Session({ history, rig, build });
   // Nothing starts with the process: no web server, no port, no browser tab. The start tool starts
   // Moontide, once. MOONTIDE_NO_BROWSER=1 makes that start open no tab (used by tests and probes).
-  const starter = createStarter({ session, noBrowser: process.env.MOONTIDE_NO_BROWSER === '1' });
+  // MOONTIDE_HOST and MOONTIDE_PUBLIC_URL serve the page through a reverse proxy; both unset keeps it on loopback.
+  const publicUrlValue = process.env.MOONTIDE_PUBLIC_URL?.trim();
+  const starter = createStarter({
+    session,
+    noBrowser: process.env.MOONTIDE_NO_BROWSER === '1',
+    host: process.env.MOONTIDE_HOST?.trim() || undefined,
+    publicUrl: publicUrlValue ? parsePublicUrl(publicUrlValue) : undefined,
+  });
   const mcpServer = createMcpServer({ session, starter });
 
   // Registered before connecting the MCP transport, so any signal sent from then on goes through

@@ -105,7 +105,7 @@ function report(failed, claude) {
 
   timer = setTimeout(() => settler.fail(), LOAD_FAILURE_REPORT_MS);
   try {
-    socket = new WebSocket('ws://' + location.host + '/ws');
+    socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   } catch (error) {
     console.error('Moontide: could not open the connection to tell Claude that a script did not load:', error);
     settler.fail();

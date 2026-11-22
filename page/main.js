@@ -2639,7 +2639,7 @@ if (typeof globalThis.getAudioContext === 'function') {
   refreshSoundState();
 }
 
-const ws = new WebSocket('ws://' + location.host + '/ws');
+const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
 
 // The only real hook for errors raised while a pattern plays — @strudel/core's logger() dispatches this
 // document-level event for every log call, error or not, so runtimeErrorFromLog (ui-state.js)
