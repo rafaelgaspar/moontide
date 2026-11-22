@@ -4,6 +4,7 @@ import { Session } from './session.js';
 import { createMcpServer } from './mcp.js';
 import { autostart, createStarter } from './start.js';
 import { parsePublicUrl } from './web-server.js';
+import { type McpHttpServer, parseMcpHttpPort, startMcpHttpServer } from './http-transport.js';
 import { HistoryStore, resolveDataDir } from './history.js';
 import { RigStore } from './instruments.js';
 import { runImportMidnamCommand } from './import-midnam.js';
@@ -43,7 +44,10 @@ async function main(): Promise<void> {
     host: process.env.MOONTIDE_HOST?.trim() || undefined,
     publicUrl: publicUrlValue ? parsePublicUrl(publicUrlValue) : undefined,
   });
-  const mcpServer = createMcpServer({ session, starter });
+  // MOONTIDE_MCP_HTTP_PORT serves MCP over Streamable HTTP (see http-transport.ts) instead of stdio.
+  const mcpHttpPort = parseMcpHttpPort(process.env.MOONTIDE_MCP_HTTP_PORT);
+  const mcpServer = mcpHttpPort === undefined ? createMcpServer({ session, starter }) : undefined;
+  let mcpHttp: McpHttpServer | undefined;
   void autostart(starter);
 
   // Registered before connecting the MCP transport, so any signal sent from then on goes through
@@ -57,17 +61,29 @@ async function main(): Promise<void> {
     console.error(`[moontide] Shutting down (${reason})`);
     const forceExit = setTimeout(() => process.exit(0), FORCE_EXIT_MS);
     forceExit.unref();
-    void Promise.allSettled([starter.close(), mcpServer.close()]).then(() => {
+    void Promise.allSettled([starter.close(), mcpServer?.close(), mcpHttp?.close()]).then(() => {
       process.exit(0);
     });
   }
 
-  process.stdin.on('end', () => shutdown('stdin end'));
-  process.stdin.on('close', () => shutdown('stdin close'));
+  // Over HTTP, stdin is not the protocol: a service usually runs with it closed.
+  if (mcpServer !== undefined) {
+    process.stdin.on('end', () => shutdown('stdin end'));
+    process.stdin.on('close', () => shutdown('stdin close'));
+  }
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGHUP', () => shutdown('SIGHUP'));
 
+  if (mcpServer === undefined) {
+    mcpHttp = await startMcpHttpServer({
+      createServer: () => createMcpServer({ session, starter }),
+      port: mcpHttpPort ?? 0,
+      host: process.env.MOONTIDE_MCP_HTTP_HOST?.trim() || undefined,
+    });
+    console.error(`[moontide] MCP over Streamable HTTP: http://${mcpHttp.host}:${mcpHttp.port}/mcp`);
+    return;
+  }
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
 }
