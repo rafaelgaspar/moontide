@@ -135,3 +135,13 @@ affiliated with, or endorsed by, the Strudel or TidalCycles projects, or Anthrop
 ---
 
 *Konni — built with an AI coding assistant.*
+
+## rafaelgaspar fork
+
+This repository is an [AGPL-3.0-or-later](LICENSE) fork of [konni-arcadia/moontide](https://github.com/konni-arcadia/moontide).
+Customizations ship as Docker images built from the **`rafaelgaspar`** integration branch:
+
+- **Image:** [`ghcr.io/rafaelgaspar/moontide`](https://github.com/rafaelgaspar/moontide/pkgs/container/moontide)
+- **Workflow:** linear stacked `feat/*` branches (see [`.cursor/skills/rafaelgaspar-fork/SKILL.md`](.cursor/skills/rafaelgaspar-fork/SKILL.md))
+
+For the Moontide manual and support, see [upstream](https://github.com/konni-arcadia/moontide).
